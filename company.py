@@ -1,6 +1,5 @@
 import csv
 import asyncio
-from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 import os
 from dotenv import load_dotenv
@@ -34,33 +33,28 @@ async def load_cookies(context):
     except json.JSONDecodeError:
         print("Error reading cookies file. Starting a new session.")
 
-async def get_domain_from_linkedin(page, link):
+async def get_company_linkedin_page(page, link):
+    if not link:
+        print("No link provided. Skipping...")
+        return None
+
     print(f"Visiting job link: {link}")
     await page.goto(link)
 
-    print("Attempting to find the company's LinkedIn life page link...")
-    await page.click('a.app-aware-link', timeout=30000)
-    print("Clicked on the company's LinkedIn life page link.")
+    # Waiting for 2 seconds to allow the DOM to render
+    print("Waiting for the DOM to render...")
+    await page.wait_for_timeout(2000)
 
-    print("Attempting to find the 'Visit website' link...")
-    website_link_elements = await page.query_selector_all('a[rel="noopener noreferrer"][target="_blank"]')
+    print("Attempting to find the company's LinkedIn page link...")
+    selector = '.job-details-jobs-unified-top-card__primary-description-without-tagline a.app-aware-link'
+    company_page_link_element = await page.query_selector(selector)
+    company_page_link = await company_page_link_element.get_attribute('href') if company_page_link_element else None
+    print(f"Extracted company LinkedIn page link: {company_page_link}")
 
-    website_url = None
-    for element in website_link_elements:
-        text = await element.text_content()
-        if "visit website" in text.lower():
-            website_url = await element.get_attribute('href')
-            break
+    return company_page_link
 
-    if website_url:
-        print(f"Extracted 'Visit website' URL: {website_url}")
-        domain = urlparse(website_url).netloc
-        print(f"Extracted domain from URL: {domain}")
-    else:
-        print("'Visit website' link not found. Skipping...")
-        domain = None
 
-    return domain
+
 
 async def process_csv(input_file, output_file):
     async with async_playwright() as p:
@@ -72,18 +66,26 @@ async def process_csv(input_file, output_file):
         with open(input_file, mode='r', newline='', encoding='utf-8') as infile, \
              open(output_file, mode='w', newline='', encoding='utf-8') as outfile:
             reader = csv.DictReader(infile)
-            fieldnames = reader.fieldnames + ['domain']
+            fieldnames = reader.fieldnames + ['company_page_link']  # Add 'company_page_link' to fieldnames
             writer = csv.DictWriter(outfile, fieldnames=fieldnames)
             writer.writeheader()
 
             for row in reader:
-                print(f"Processing {row['link']}...")
-                domain = await get_domain_from_linkedin(page, row['link'])
-                row['domain'] = domain
+                link = row.get('link')
+                if not link:
+                    print(f"Skipping row with missing 'link': {row}")
+                    row['company_page_link'] = None
+                else:
+                    print(f"Processing {link}...")
+                    company_page_link = await get_company_linkedin_page(page, link)
+                    row['company_page_link'] = company_page_link
                 writer.writerow(row)
 
         await save_cookies(context)
         await browser.close()
+
+
+
 
 # Run the async main function
 asyncio.run(process_csv(input_file_path, output_file_path))
