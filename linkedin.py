@@ -71,22 +71,8 @@ async def scrape_jobs_on_page(page):
         job_elements = await page.query_selector_all(
             'div.job-card-container.relative.job-card-list.job-card-container--clickable')
 
-        # Scroll down within the container
-        await page.evaluate('''() => {
-            console.log('Evaluating the page');
-            const container = document.querySelector('.jobs-search-results-list');
-            const scrollHeight = 1000;
-            if (container) {
-                console.log('Found container: ', container);
-                console.log(`scrollHeight: `, scrollHeight);
-                container.scrollBy(0, container.scrollHeight);
-            } else {
-                console.log('No container');
-            }
-        }''')
-
         # Wait for new jobs to load after scrolling
-        await page.wait_for_timeout(2000)
+        await page.wait_for_timeout(3000)
 
         # Check if new jobs are loaded
         new_job_elements = await page.query_selector_all(
